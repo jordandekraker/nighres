@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-
+# set -e -x
 
 #
 ## SETUP
@@ -112,4 +112,3 @@ cd ..
 
 # remove unused folders
 rm -rf cbstools-public
-rm -rf build
