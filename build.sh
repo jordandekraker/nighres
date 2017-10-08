@@ -1,4 +1,10 @@
 #!/usr/bin/env bash
+
+
+#
+## SETUP
+#
+
 set -euo pipefail
 unset CDPATH; cd "$( dirname "${BASH_SOURCE[0]}" )"; cd "$(pwd -P)"
 
@@ -10,20 +16,14 @@ cbstools_repo="https://github.com/piloubazin/cbstools-public.git"
 # Check the system has the necessary commands
 hash wget tar javac jar python pip 2>/dev/null || fatal "This script needs the following commands available: wget tar javac jar python pip"
 
-# Check for setuptools and wheels
+# Check that JCC is installed
 pip_modules=$(pip list --format columns | tr -s ' ' | cut -f 1 -d ' ')
-echo "${pip_modules}" | grep setuptools > /dev/null || fatal 'This script requires setuptools.\nInstall with `pip install --upgrade setuptools`'
-echo "${pip_modules}" | grep wheel > /dev/null || fatal 'This script requires wheel.\nInstall with `pip install --upgrade wheel`'
-
-# echo "Before detection: $JAVA_HOME"
+echo "${pip_modules}" | grep JCC > /dev/null || fatal 'This script requires JCC.\nInstall with `apt-get install jcc` or equivalent and `pip install jcc`'
 
 # Set the JAVA_HOME variable if it is not set
 detected_home=$(java -XshowSettings:properties -version 2>&1 | tr -d ' '| grep java.home | cut -f 2 -d '=')
 export JAVA_HOME=${JAVA_HOME:-"$detected_home"}
-# echo "After detection: $JAVA_HOME"
-
-# Check that JCC is installed
-echo "${pip_modules}" | grep JCC > /dev/null || fatal 'This script requires JCC.\nInstall with `apt-get install jcc` or equivalent and `pip install jcc`'
+echo "Java home detected: $JAVA_HOME"
 
 # Attempt to check for python development headers
 # Inspired by https://stackoverflow.com/a/4850603
@@ -34,6 +34,7 @@ test -f "${python_include_path}/Python.h" || fatal 'This script requires python 
 test -d cbstools-public || (
 	git clone $cbstools_repo
 )
+
 
 #
 ## COMPILE
@@ -48,9 +49,8 @@ deps=(
 deps_list=$(join_by ":" "${deps[@]}")
 
 # List of library files needed to run the cbstools core functions
-source ../cbstools-lib-files.sh
+source cbstools-lib-files.sh
 echo $cbstools_files # result is in $cbstools_files
-
 cbstools_list=$(join_by " " "${cbstools_files[@]}")
 
 # Compilation options
@@ -64,17 +64,15 @@ javac_opts=(
 	"-encoding UTF-8" # Require UTF-8, rather than platform-specifc
 )
 
-echo "Compiling..."
+echo "Compiling CBS Tools Java code"
 cd cbstools-public
 mkdir -p build
 javac -cp ${deps_list} ${javac_opts[@]} de/mpg/cbs/core/*/*.java $cbstools_list
 
-# Some other examples I found elsewhere, that we're not currently using
-# $CODE/de/mpg/cbs/*/*.java $CODE/de/mpg/cbs/core/*/*.java $CODE/de/mpg/cbs/jist/*/*.java $CODE/edu/jhu/ece/iacl/jist/*/*.java
-
-echo "Assembling..."
+echo "Assembling jars"
 jar cf cbstools.jar     de/mpg/cbs/core/*/*.class
 jar cf cbstools-lib.jar de/mpg/cbs/*/*.class
+
 
 
 #
@@ -104,30 +102,14 @@ python -m jcc ${jcc_args[@]}
 
 
 #
-# Assemble PYPI package
+# Copy all files to run the JCC wrappers into the appropriate places
 #
-
-echo "Copying necessary files for nires pypi package..."
 
 cp -rv build/cbstools/ ../
 # Find and copy the shared object file for the current architecture
 find build/ -type f | grep '.so$' | head -n 1 | xargs -I '{}' -- cp '{}' ../cbstools/_cbstools.so
 cd ..
 
-# Make the python wheel
-# PLT=$(uname | tr '[:upper:]' '[:lower:]')
-# for now use manylinux
-# PLT="manylinux1"
-# CPU=$(lscpu | grep -oP 'Architecture:\s*\K.+')
-# PY="$(python -V 2>&1)"
-# if [[ $PY == *2\.*\.* ]]; then
-#     python setup.py bdist_wheel --dist-dir dist --plat-name ${PLT}_${CPU} --python-tag py2
-# elif [[ $PY == *3\.*\.* ]]; then
-# 	python setup.py bdist_wheel --dist-dir dist --plat-name ${PLT}_${CPU} --python-tag py3
-# fi
-
-
 # remove unused folders
-# rm -rf build
-# rm -rf cbstools-public
-# rm -rf nighres.egg-info
+rm -rf cbstools-public
+rm -rf build
